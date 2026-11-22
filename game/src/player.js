@@ -1,95 +1,77 @@
-// NIGHT VAULT — the thief.
-// Movement is WASD or arrows, Shift to sneak, click to walk somewhere.
-// Two tools, each with a real cost: a smoke bomb that blinds the room
-// (but trips a sensor) and an EMP that kills the cameras (but trips a
-// tamper alarm). Tools are scarce on purpose — a heist is about choosing
-// when to spend them.
+// NEON VAULT — The Golden Chip Job: the thief.
+// WASD/arrows to walk, Shift to sneak, click to walk there, E to use
+// whatever is in front of them. Smoke (Q) and EMP (F) are tools at a cost:
+// each one buys safety with alarm. The thief hides in a smoke cloud.
 
-import { PLAYER, TOOLS, ALARM } from './config.js';
-import { moveCircle, distance } from './level.js';
+import { PLAYER, TOOLS } from './config.js';
+import { moveCircle } from './level.js';
 
-export function makePlayer(x, y) {
+export function makePlayer(entry) {
   return {
-    x, y,
-    angle: -Math.PI / 2, // facing up the rooftop when the job starts
+    x: entry.x,
+    y: entry.y,
     sneaking: false,
-    moving: false,
+    hidden: false, // standing inside a smoke cloud
+    smokeLeft: TOOLS.smokeCharges,
+    empLeft: TOOLS.empCharges,
     clickTarget: null,
-    smokeCharges: TOOLS.smokeCharges,
-    empCharges: TOOLS.empCharges,
-    stepSound: 0, // seconds until the next footstep tick
+    facing: -Math.PI / 2,
+    bob: 0,
   };
 }
 
-// Read the held keys and move the thief. Returns the direction the thief
-// is facing, so the renderer and the guards' sight agree on it.
-export function updatePlayer(player, keys, dt, vaultDoorLocked) {
-  let dx = 0;
-  let dy = 0;
-  if (keys.left) dx -= 1;
-  if (keys.right) dx += 1;
-  if (keys.up) dy -= 1;
-  if (keys.down) dy += 1;
+// keys is a Set of currently-held key names (lowercase). Returns nothing;
+// the game reads player.x / player.y after the call.
+export function stepPlayer(p, dt, keys, solids) {
+  let mx = 0;
+  let my = 0;
+  if (keys.has('a') || keys.has('arrowleft')) mx -= 1;
+  if (keys.has('d') || keys.has('arrowright')) mx += 1;
+  if (keys.has('w') || keys.has('arrowup')) my -= 1;
+  if (keys.has('s') || keys.has('arrowdown')) my += 1;
 
-  if (dx === 0 && dy === 0 && player.clickTarget) {
-    const tx = player.clickTarget.x - player.x;
-    const ty = player.clickTarget.y - player.y;
-    const d = Math.hypot(tx, ty);
-    if (d < 8) {
-      player.clickTarget = null;
+  if (mx === 0 && my === 0 && p.clickTarget) {
+    const dx = p.clickTarget.x - p.x;
+    const dy = p.clickTarget.y - p.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 6) {
+      p.clickTarget = null;
     } else {
-      dx = tx / d;
-      dy = ty / d;
+      mx = dx / d;
+      my = dy / d;
     }
   }
 
-  player.moving = dx !== 0 || dy !== 0;
-  player.sneaking = !!keys.sneak && player.moving;
-  if (!player.moving) return;
-
-  const len = Math.hypot(dx, dy);
-  const speed = player.sneaking ? PLAYER.sneakSpeed : PLAYER.walkSpeed;
-  const moved = moveCircle(
-    player.x, player.y, PLAYER.radius,
-    (dx / len) * speed * dt, (dy / len) * speed * dt,
-    vaultDoorLocked,
-  );
-  player.x = moved.x;
-  player.y = moved.y;
-  player.angle = Math.atan2(dy, dx);
-
-  player.stepSound -= dt;
-}
-
-// Throw a smoke bomb at the thief's feet. The cloud hides the thief from
-// guards and cameras, but the sensor it trips feeds the alarm.
-export function useSmoke(player, game) {
-  if (player.smokeCharges <= 0) return false;
-  if (game.smoke) return false; // one cloud at a time
-  player.smokeCharges -= 1;
-  game.smoke = { x: player.x, y: player.y, radius: TOOLS.smokeRadius, seconds: TOOLS.smokeSeconds };
-  game.alarm = Math.min(ALARM.max, game.alarm + ALARM.toolSmokeCost);
-  game.events.push('smoke');
-  return true;
-}
-
-// Fire the EMP. Every camera goes dark for a while, but the tamper sensor
-// feeds the alarm.
-export function useEmp(player, game) {
-  if (player.empCharges <= 0) return false;
-  player.empCharges -= 1;
-  for (const camera of game.cameras) {
-    camera.offlineSeconds = TOOLS.empSeconds;
-    camera.lockSeconds = 0;
-    camera.locked = false;
+  p.sneaking = keys.has('shift');
+  const speed = p.sneaking ? PLAYER.sneakSpeed : PLAYER.walkSpeed;
+  if (mx !== 0 || my !== 0) {
+    const len = Math.hypot(mx, my);
+    const moved = moveCircle(
+      p.x, p.y, PLAYER.radius,
+      (mx / len) * speed * dt, (my / len) * speed * dt, solids,
+    );
+    p.x = moved.x;
+    p.y = moved.y;
+    p.facing = Math.atan2(my, mx);
+    p.bob += dt * (p.sneaking ? 6 : 11);
   }
-  game.alarm = Math.min(ALARM.max, game.alarm + ALARM.toolEmpCost);
-  game.events.push('emp');
+}
+
+export function useSmoke(p, smokes) {
+  if (p.smokeLeft <= 0) return false;
+  p.smokeLeft -= 1;
+  smokes.push({ x: p.x, y: p.y, r: TOOLS.smokeRadius, left: TOOLS.smokeSeconds });
   return true;
 }
 
-// Is the thief standing inside a smoke cloud? Guards and cameras cannot
-// see through it.
-export function inSmoke(player, smoke) {
-  return !!smoke && distance(player.x, player.y, smoke.x, smoke.y) < smoke.radius;
+export function useEmp(p, cameras) {
+  if (p.empLeft <= 0) return false;
+  p.empLeft -= 1;
+  for (const c of cameras) c.dark = TOOLS.empSeconds;
+  return true;
+}
+
+// The thief is hidden while any live smoke cloud covers them.
+export function updateHidden(p, smokes) {
+  p.hidden = smokes.some((s) => Math.hypot(p.x - s.x, p.y - s.y) < s.r);
 }

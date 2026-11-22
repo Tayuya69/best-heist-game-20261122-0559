@@ -1,33 +1,43 @@
-[![make.fun](https://make.fun/badge/best-heist-game-20261122-0559.svg)](https://make.fun/?ref=fmy43x6e&utm_source=github&utm_medium=readme&utm_campaign=best-heist-game-20261122-0559)
-[![rank](https://make.fun/badge/best-heist-game-20261122-0559/Tayuya69/best-heist-game-20261122-0559/rank.svg)](https://make.fun/bounty/best-heist-game-20261122-0559)
-[![reward](https://make.fun/badge/best-heist-game-20261122-0559/Tayuya69/best-heist-game-20261122-0559/reward.svg)](https://make.fun/bounty/best-heist-game-20261122-0559)
+# NEON VAULT — The Golden Chip Job
 
-# NIGHT VAULT — The Aurum Bank Job
-
-A top-down stealth heist game, built for the [make.fun "Make the best heist game" competition](https://make.fun/bounty/best-heist-game-20261122-0559). One thief, one bank tower at night, one Aurum Diamond. Drop in on the rooftop, lift the keycard from the manager's office, unlock the vault floor, crack the vault dial, and be on the helicopter pad before dawn — past five patrolling guards and four sweeping cameras.
+A top-down stealth heist game for the make.fun "Make the best heist game"
+bounty. Rob the Golden Chip casino before 6:00: slip in from the parking
+garage, lift the VIP keycard from the lounge, kill the cage alarm at the
+cashier, crack the vault's chip-sequence lock, grab the $1,000 jackpot and
+vanish into the garage.
 
 ## How it plays
 
-- **One tower, four zones** — rooftop, executive offices, trading floor and vault floor, each with its own floor and cover. Doors connect them; the vault-floor door only opens with the keycard, and the vault itself only opens for a steady hand on the dial.
-- **Guards with visible vision cones** patrol routes you can learn (Rook, Vera, Kane, Sable, Moss). Standing in a lit cone fills a suspicion arc; a full arc means he chases your last-seen spot. Lose him for a few seconds and he walks back.
-- **Cameras sweep red beams** across the offices, the trading floor and the vault floor. A beam that locks on calls the nearest guard to your position — or knock every camera dark with the EMP.
-- **Tools at a cost** — a smoke bomb (×2) blinds the room for 5 seconds but trips a sensor (+5 alarm); an EMP (×1) kills all cameras for 20 seconds but trips a tamper alarm (+8). Spend them where they buy the most.
-- **The vault dial** — a pointer spins and three tumblers wait, each with a green target arc. Stop the pointer inside the arc three times; a miss jumps the alarm. The dial spins faster with every tumbler.
-- **An alarm meter with a way back** — it rises while anyone sees you and bleeds off while you hide. At 100% the tower locks down and the job is over.
-- **Depth** — ten side-loot targets (cash, gold, bonds), a keycard objective chain, sneak speed vs. detection trade-offs, three lives with a rooftop respawn, a 6:00 clock, and a score with time + ghost bonuses.
-- **Feel and polish** — wall sliding, click-to-move, an objective arrow that points at the job's next step, WebAudio synth footsteps, pickup chimes, alarm stings and win/lose jingles, title / how-to / pause / caught / lockdown / timeout / win screens, particles on pickups, screen shake on alarms, and a night vignette.
+- **Move** WASD / arrows (or click to walk there), **Shift** sneaks,
+  **E** interacts, **Q** smoke bomb (×2), **F** EMP (×1), **P** pauses,
+  **M** mutes, **R** retries.
+- Five guards patrol the floor with vision cones; four cameras sweep beams
+  that track you and call the nearest guard. Slot machines, card tables,
+  the roulette wheel, couches and parked cars all block sight, so you read
+  the cones and pick a route.
+- The alarm meter climbs while a guard hunts or a camera holds you, and
+  bleeds off while you stay hidden. At 100 the casino locks down.
+- The vault lock is a memory game: watch the neon chips flash, then repeat
+  the sequence (keys 1–4 or click). Three rounds, each one chip longer.
+  A wrong chip costs alarm.
+- Score is loot plus a time bonus plus a $500 ghost bonus for staying
+  under 25 alarm all run.
 
-## Controls
+## Files
 
-| Input | Action |
-|---|---|
-| WASD / arrow keys | Move |
-| Shift (hold) | Sneak — slower, harder to spot |
-| E | Interact / crack (lock a tumbler inside the green) |
-| Q | Smoke bomb (2 charges, +5 alarm) |
-| F | EMP — cameras dark 20s (1 charge, +8 alarm) |
-| Click | Walk to that point |
-| Enter | Start |
-| P | Pause |
-| M | Mute |
-| R | Retry after an ending |
+- `game/index.html` — the page (960×600 canvas, shot mode for screenshots)
+- `game/src/config.js` — tuning and the neon-casino palette
+- `game/src/level.js` — the casino floor, walls, doors, cover, loot, routes
+- `game/src/guards.js` — guard patrol/sight/chase and camera sweep/track/lock
+- `game/src/player.js` — movement, collision, sneak, smoke and EMP
+- `game/src/vault.js` — the chip-sequence lock (pure logic)
+- `game/src/game.js` — the state machine, objectives, alarm, win/lose
+- `game/src/render.js` — canvas drawing of the casino
+- `game/src/hud.js` — HUD (alarm meter, objective, loot, clock) and screens
+- `game/src/audio.js` — synthesized WebAudio sound, no audio files
+- `game/src/main.js` — bootstrap, input, animation loop
+- `main.ts` — the make.fun entrypoint: copies game/ and screenshots/ to
+  /output and writes dossier.json
+
+Play it locally: `cd game && python3 -m http.server 8123`, then open
+http://localhost:8123 in a desktop browser. No build step, no network.

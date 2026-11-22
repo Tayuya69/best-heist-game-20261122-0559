@@ -1,181 +1,183 @@
-// NIGHT VAULT — guards and cameras.
-// A guard walks a patrol route and watches a cone in front of him. Stand
-// in the cone and his suspicion fills; fill it and he chases the spot he
-// last saw you. Lose him for a few seconds and he walks back to his route.
-// A camera sweeps a beam; stand in the beam and it locks on, then calls
-// the nearest guard to your position. Both are fair: their cones and beams
-// are drawn, and cover blocks their sight.
+// NEON VAULT — The Golden Chip Job: guards and cameras.
+// A guard patrols its route, watches a cone, and chases the thief it has
+// stared at long enough; a camera sweeps a beam and, once it has the thief
+// in it, tracks them and calls the nearest guard. Both read their cones
+// through the level's walls and cover, so the thief hides behind a slot
+// machine the same way they hide behind a wall.
 
-import { GUARD, CAMERA, PLAYER } from './config.js';
-import { hasLineOfSight, distance, angleDifference, moveCircle } from './level.js';
+import { GUARD, CAMERA, ALARM } from './config.js';
+import { sightBlocked } from './level.js';
 
-export function makeGuard(route, index) {
-  const start = route.waypoints[0];
-  return {
-    name: route.name,
-    x: start.x,
-    y: start.y,
-    angle: 0,
-    waypoints: route.waypoints,
-    mode: route.mode,
-    waypointIndex: 1 % route.waypoints.length,
-    waypointDirection: 1,
+function dist(ax, ay, bx, by) {
+  return Math.hypot(ax - bx, ay - by);
+}
+
+function angleTo(ax, ay, bx, by) {
+  return Math.atan2(by - ay, bx - ax);
+}
+
+function angleDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+export function makeGuards(routes) {
+  return routes.map((r, i) => ({
+    name: r.name,
+    pts: r.pts,
+    leg: 0,
+    x: r.pts[0][0],
+    y: r.pts[0][1],
+    facing: 0,
     state: 'patrol', // patrol | chase | return
     suspicion: 0,
-    lastSeenX: start.x,
-    lastSeenY: start.y,
-    unseenSeconds: 0,
-    phase: index * 1.7, // staggers guards so they do not move in lockstep
-  };
+    unseen: 0,
+    id: i,
+  }));
 }
 
-export function makeCamera(mount) {
-  return {
-    x: mount.x,
-    y: mount.y,
-    restAngle: mount.restAngle,
-    angle: mount.restAngle,
-    sweepTime: 0, // accumulated time; the sweep runs on game time, not wall time
-    lockSeconds: 0,
-    locked: false,
-    offlineSeconds: 0,
-  };
+export function makeCameras(defs) {
+  return defs.map((d, i) => ({
+    x: d.x,
+    y: d.y,
+    rest: d.rest,
+    angle: d.rest,
+    sweepTime: i * 1.1, // stagger the sweeps so they don't all swing together
+    tracking: false,
+    lock: 0,
+    dark: 0, // EMP seconds left
+    id: i,
+  }));
 }
 
-// Can this guard see the thief right now? The thief must be inside the
-// cone, inside range (sneaking shrinks it), and in open sight.
-export function guardSeesThief(guard, thief, sneaking, vaultDoorLocked) {
-  const range = GUARD.sightRange * (sneaking ? PLAYER.sneakSightFactor : 1);
-  const d = distance(guard.x, guard.y, thief.x, thief.y);
-  if (d > range) return false;
-  const toThief = Math.atan2(thief.y - guard.y, thief.x - guard.x);
-  if (Math.abs(angleDifference(toThief, guard.angle)) > GUARD.sightHalfAngle) return false;
-  return hasLineOfSight(guard.x, guard.y, thief.x, thief.y, vaultDoorLocked);
+// One guard step. Returns 'caught' when this guard touches the thief,
+// 'chase' while it is actively hunting, 'seen' while it is filling
+// suspicion, or null.
+export function stepGuard(g, dt, thief, solids, onChase) {
+  const range = GUARD.sightRange * (thief.sneaking ? 0.62 : 1);
+  const d = dist(g.x, g.y, thief.x, thief.y);
+  const inCone =
+    d < range &&
+    Math.abs(angleDiff(angleTo(g.x, g.y, thief.x, thief.y), g.facing)) <
+      GUARD.sightHalfAngle &&
+    !sightBlocked(g.x, g.y, thief.x, thief.y, solids) &&
+    !thief.hidden;
+
+  if (g.state === 'patrol') {
+    if (inCone) {
+      g.suspicion += dt / GUARD.suspectSeconds * (thief.sneaking ? 0.55 : 1);
+      if (g.suspicion >= 1) {
+        g.state = 'chase';
+        g.unseen = 0;
+        if (onChase) onChase(g);
+      }
+    } else {
+      g.suspicion = Math.max(0, g.suspicion - dt / GUARD.suspectSeconds);
+      walkPatrol(g, dt);
+    }
+  } else if (g.state === 'chase') {
+    if (inCone) {
+      g.unseen = 0;
+    } else {
+      g.unseen += dt;
+      if (g.unseen > GUARD.loseSightSeconds) {
+        g.state = 'return';
+        g.suspicion = 0.4;
+      }
+    }
+    // Chase the thief: run at them while seen, and keep running at the
+    // spot the alarm came from while unseen, until the trail goes cold.
+    moveToward(g, thief.x, thief.y, GUARD.chaseSpeed, dt, solids);
+    g.facing = angleTo(g.x, g.y, thief.x, thief.y);
+    if (d < GUARD.catchDistance) return 'caught';
+    return 'chase';
+  } else {
+    // Return: walk back to the patrol route, then resume it.
+    const home = g.pts[g.leg];
+    if (dist(g.x, g.y, home[0], home[1]) < 8) {
+      g.state = 'patrol';
+      g.suspicion = 0;
+    } else {
+      moveToward(g, home[0], home[1], GUARD.returnSpeed, dt, solids);
+      g.facing = angleTo(g.x, g.y, home[0], home[1]);
+    }
+  }
+  return inCone ? 'seen' : null;
 }
 
-// Can this camera see the thief? Same test, with the camera's own beam.
-export function cameraSeesThief(camera, thief, vaultDoorLocked) {
-  if (camera.offlineSeconds > 0) return false;
-  const d = distance(camera.x, camera.y, thief.x, thief.y);
-  if (d > CAMERA.range) return false;
-  const toThief = Math.atan2(thief.y - camera.y, thief.x - camera.x);
-  if (Math.abs(angleDifference(toThief, camera.angle)) > CAMERA.halfAngle) return false;
-  return hasLineOfSight(camera.x, camera.y, thief.x, thief.y, vaultDoorLocked);
+function walkPatrol(g, dt) {
+  const target = g.pts[(g.leg + 1) % g.pts.length];
+  const d = dist(g.x, g.y, target[0], target[1]);
+  if (d < 6) {
+    g.leg = (g.leg + 1) % g.pts.length;
+    return;
+  }
+  const step = (GUARD.patrolSpeed * dt) / d;
+  g.x += (target[0] - g.x) * step;
+  g.y += (target[1] - g.y) * step;
+  g.facing = angleTo(g.x, g.y, target[0], target[1]);
 }
 
-function stepToward(guard, tx, ty, speed, dt, vaultDoorLocked) {
-  const dx = tx - guard.x;
-  const dy = ty - guard.y;
-  const d = Math.hypot(dx, dy);
-  if (d < 1) return true;
+function moveToward(g, tx, ty, speed, dt, solids) {
+  const d = dist(g.x, g.y, tx, ty);
+  if (d < 1) return;
   const step = Math.min(d, speed * dt);
-  const nx = guard.x + (dx / d) * step;
-  const ny = guard.y + (dy / d) * step;
-  // Guards slide along walls the same way the thief does, so a patrol
-  // never wedges itself into a corner.
-  const moved = moveCircle(guard.x, guard.y, GUARD.radius, nx - guard.x, ny - guard.y, vaultDoorLocked);
-  guard.x = moved.x;
-  guard.y = moved.y;
-  guard.angle = Math.atan2(dy, dx);
-  return d - step < 2;
+  const nx = g.x + ((tx - g.x) / d) * step;
+  const ny = g.y + ((ty - g.y) / d) * step;
+  // Guards slide around cover instead of getting stuck on a corner.
+  const blocked = solids.some(
+    (s) => nx > s.x - GUARD.radius && nx < s.x + s.w + GUARD.radius &&
+      ny > s.y - GUARD.radius && ny < s.y + s.h + GUARD.radius,
+  );
+  if (!blocked) {
+    g.x = nx;
+    g.y = ny;
+  } else {
+    const tryX = solids.every(
+      (s) => nx <= s.x - GUARD.radius || nx >= s.x + s.w + GUARD.radius ||
+        g.y <= s.y - GUARD.radius || g.y >= s.y + s.h + GUARD.radius,
+    );
+    if (tryX) g.x = nx;
+  }
 }
 
-export function updateGuard(guard, thief, sneaking, dt, vaultDoorLocked, smoke) {
-  const hiddenBySmoke = smoke && distance(thief.x, thief.y, smoke.x, smoke.y) < smoke.radius;
-  const seen = !hiddenBySmoke && guardSeesThief(guard, thief, sneaking, vaultDoorLocked);
+// One camera step. Returns 'lock' when the beam has held the thief long
+// enough to dispatch a guard, or null. A sweeping beam only builds lock
+// while it is on the thief; once it has them it stops sweeping and tracks
+// them, so the lock builds instead of decaying away.
+export function stepCamera(c, dt, thief, solids, time) {
+  if (c.dark > 0) {
+    c.dark -= dt;
+    c.lock = 0;
+    c.tracking = false;
+    return null;
+  }
+  const d = dist(c.x, c.y, thief.x, thief.y);
+  const inBeam =
+    d < CAMERA.range &&
+    Math.abs(angleDiff(angleTo(c.x, c.y, thief.x, thief.y), c.angle)) <
+      CAMERA.halfAngle &&
+    !sightBlocked(c.x, c.y, thief.x, thief.y, solids) &&
+    !thief.hidden;
 
-  if (seen) {
-    guard.lastSeenX = thief.x;
-    guard.lastSeenY = thief.y;
-    guard.unseenSeconds = 0;
-    const fill = dt / GUARD.suspectSeconds * (sneaking ? PLAYER.sneakFillFactor : 1);
-    guard.suspicion = Math.min(1, guard.suspicion + fill);
-    if (guard.suspicion >= 1 && guard.state !== 'chase') {
-      guard.state = 'chase';
+  if (inBeam) {
+    c.tracking = true;
+    c.angle = angleTo(c.x, c.y, thief.x, thief.y);
+    c.lock += dt / CAMERA.lockSeconds;
+    if (c.lock >= 1) {
+      c.lock = 0;
+      return 'lock';
     }
   } else {
-    guard.suspicion = Math.max(0, guard.suspicion - dt * 0.5);
-    if (guard.state === 'chase') {
-      guard.unseenSeconds += dt;
-      if (guard.unseenSeconds >= GUARD.loseSightSeconds) {
-        guard.state = 'return';
-      }
-    }
+    c.tracking = false;
+    c.lock = Math.max(0, c.lock - dt / CAMERA.lockSeconds);
+    // Sweep on game time, not wall-clock time, so pausing the game
+    // freezes the beams where they are.
+    c.angle =
+      c.rest + Math.sin((time + c.sweepTime) * (Math.PI * 2) / CAMERA.sweepSeconds) *
+        CAMERA.sweepHalfAngle;
   }
-
-  if (guard.state === 'chase') {
-    stepToward(guard, guard.lastSeenX, guard.lastSeenY, GUARD.chaseSpeed, dt, vaultDoorLocked);
-    return distance(guard.x, guard.y, thief.x, thief.y) <= GUARD.catchDistance;
-  }
-
-  if (guard.state === 'return') {
-    const home = guard.waypoints[guard.waypointIndex];
-    const arrived = stepToward(guard, home.x, home.y, GUARD.returnSpeed, dt, vaultDoorLocked);
-    if (arrived) guard.state = 'patrol';
-    return false;
-  }
-
-  // Patrol: walk to the current waypoint, then pick the next one.
-  const target = guard.waypoints[guard.waypointIndex];
-  const arrived = stepToward(guard, target.x, target.y, GUARD.patrolSpeed, dt, vaultDoorLocked);
-  if (arrived) {
-    if (guard.mode === 'loop') {
-      guard.waypointIndex = (guard.waypointIndex + 1) % guard.waypoints.length;
-    } else {
-      guard.waypointIndex += guard.waypointDirection;
-      if (guard.waypointIndex >= guard.waypoints.length || guard.waypointIndex < 0) {
-        guard.waypointDirection *= -1;
-        guard.waypointIndex += guard.waypointDirection * 2;
-      }
-    }
-  }
-  return false;
-}
-
-// A camera sweeps its beam back and forth — until it sees the thief.
-// Then it stops sweeping and tracks: the beam stays on the thief and the
-// lock builds. Break line of sight (duck behind cover, or slip out of
-// the beam) and the camera resumes its sweep and the lock bleeds off.
-// Returns the guard to dispatch on a full lock, or null.
-export function updateCamera(camera, thief, guards, dt, vaultDoorLocked, smoke) {
-  if (camera.offlineSeconds > 0) {
-    camera.offlineSeconds -= dt;
-    camera.lockSeconds = 0;
-    camera.locked = false;
-    return null;
-  }
-
-  const hiddenBySmoke = smoke && distance(thief.x, thief.y, smoke.x, smoke.y) < smoke.radius;
-  const seen = !hiddenBySmoke && cameraSeesThief(camera, thief, vaultDoorLocked);
-
-  if (seen) {
-    // Tracking: hold the beam on the thief and build the lock.
-    camera.lockSeconds += dt;
-    if (camera.lockSeconds >= CAMERA.lockSeconds && !camera.locked) {
-      camera.locked = true;
-      let nearest = null;
-      let best = Infinity;
-      for (const g of guards) {
-        const d = distance(g.x, g.y, thief.x, thief.y);
-        if (d < best) { best = d; nearest = g; }
-      }
-      if (nearest) {
-        nearest.state = 'chase';
-        nearest.lastSeenX = thief.x;
-        nearest.lastSeenY = thief.y;
-        nearest.unseenSeconds = 0;
-        nearest.suspicion = 1;
-        return nearest;
-      }
-    }
-    return null;
-  }
-
-  // Not seen: the lock bleeds off and the sweep resumes.
-  camera.lockSeconds = Math.max(0, camera.lockSeconds - dt);
-  camera.locked = false;
-  camera.sweepTime += dt;
-  const sweep = Math.sin((camera.sweepTime / CAMERA.sweepSeconds) * Math.PI * 2);
-  camera.angle = camera.restAngle + sweep * CAMERA.sweepHalfAngle;
   return null;
 }

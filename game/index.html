@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NIGHT VAULT — The Aurum Bank Job</title>
+<title>NEON VAULT — The Golden Chip Job</title>
 <style>
   html, body {
     margin: 0;
     padding: 0;
-    background: #0b0d12;
-    color: #e8e4d8;
+    background: #0d0714;
+    color: #f2e6ff;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   body {
@@ -24,38 +24,40 @@
     margin: 0;
     font-size: 20px;
     letter-spacing: 4px;
-    color: #f2c14e;
+    color: #ff2e88;
+    text-shadow: 0 0 12px rgba(255, 46, 136, 0.7);
   }
-  h1 span { color: #4fd2ff; }
+  h1 span { color: #2ee6ff; text-shadow: 0 0 12px rgba(46, 230, 255, 0.7); }
   canvas {
     display: block;
     width: min(960px, 96vw);
     height: auto;
-    background: #0b0d12;
-    border: 2px solid #3a3f4d;
+    background: #0d0714;
+    border: 2px solid #4a2b6b;
     border-radius: 6px;
     cursor: crosshair;
   }
   p.help {
     margin: 0;
     font-size: 13px;
-    color: #9aa1b0;
+    color: #b9a8cc;
     text-align: center;
     max-width: 960px;
   }
   /* Shot mode: the page is just the canvas, so a headless screenshot
      captures the game at exactly 960 by 600. */
-  body.shot { gap: 0; }
+  body.shot { gap: 0; overflow: hidden; }
   body.shot h1, body.shot p.help { display: none; }
   body.shot canvas { width: 960px; border: 0; border-radius: 0; }
 </style>
 </head>
 <body>
-<h1>NIGHT VAULT <span>— The Aurum Bank Job</span></h1>
+<h1>NEON VAULT <span>— The Golden Chip Job</span></h1>
 <canvas id="game" width="960" height="600"></canvas>
-<p class="help">Steal the Aurum Diamond from the Aurum Bank tower: drop in on the rooftop, lift the keycard
-from the manager’s office, crack the vault dial, and be on the helicopter pad before dawn.
-WASD / arrows move, Shift sneaks, E interacts, Q smoke, F EMP, click walks there, P pauses, M mutes, R retries.</p>
+<p class="help">Rob the Golden Chip casino: slip in from the parking garage, lift the VIP keycard from the
+lounge, kill the cage alarm at the cashier, crack the vault's chip-sequence lock, grab the jackpot
+and vanish into the garage before 6:00. WASD / arrows move, Shift sneaks, E interacts, Q smoke,
+F EMP, click walks there, P pauses, M mutes, R retries.</p>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

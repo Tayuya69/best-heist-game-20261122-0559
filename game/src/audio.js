@@ -1,112 +1,57 @@
-// NIGHT VAULT — sound, synthesised.
-// No audio files: every sound is a small WebAudio patch built on the fly.
-// The context is created on the first key or click, because browsers do
-// not let a page play sound before the player has touched it.
+// NEON VAULT — The Golden Chip Job: synthesized sound.
+// No audio files: every blip is a WebAudio oscillator, so the game loads
+// nothing over the network. The casino hums a low synth pad while the
+// thief works, and each action gets its own short note.
 
-let ctx = null;
-let muted = false;
-
-export function isMuted() {
-  return muted;
+export function makeAudio() {
+  return { ctx: null, muted: false, pad: null };
 }
 
-export function toggleMute() {
-  muted = !muted;
-  return muted;
-}
-
-function ensureContext() {
-  if (!ctx) {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return null;
-    ctx = new AudioContext();
+function ensure(a) {
+  if (!a.ctx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    a.ctx = new AC();
+    // A low casino pad: two detuned sines, very quiet, looping.
+    const gain = a.ctx.createGain();
+    gain.gain.value = 0.03;
+    gain.connect(a.ctx.destination);
+    for (const freq of [110, 164.8]) {
+      const osc = a.ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      osc.connect(gain);
+      osc.start();
+    }
+    a.pad = gain;
   }
-  if (ctx.state === 'suspended') ctx.resume();
-  return ctx;
+  if (a.ctx.state === 'suspended') a.ctx.resume();
+  return a.ctx;
 }
 
-export function unlockAudio() {
-  ensureContext();
-}
-
-function tone(frequency, seconds, type, gainValue, slideTo) {
-  if (muted) return;
-  const audio = ensureContext();
-  if (!audio) return;
-  const osc = audio.createOscillator();
-  const gain = audio.createGain();
-  osc.type = type || 'sine';
-  osc.frequency.setValueAtTime(frequency, audio.currentTime);
-  if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, audio.currentTime + seconds);
-  gain.gain.setValueAtTime(gainValue || 0.08, audio.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + seconds);
+export function beep(a, freq, ms, type = 'sine', vol = 0.12) {
+  if (a.muted) return;
+  const ctx = ensure(a);
+  if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(vol, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + ms / 1000);
   osc.connect(gain);
-  gain.connect(audio.destination);
+  gain.connect(ctx.destination);
   osc.start();
-  osc.stop(audio.currentTime + seconds);
+  osc.stop(ctx.currentTime + ms / 1000);
 }
 
-function noise(seconds, gainValue, filterFrequency) {
-  if (muted) return;
-  const audio = ensureContext();
-  if (!audio) return;
-  const length = Math.floor(audio.sampleRate * seconds);
-  const buffer = audio.createBuffer(1, length, audio.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
-  const source = audio.createBufferSource();
-  source.buffer = buffer;
-  const filter = audio.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.value = filterFrequency || 1200;
-  const gain = audio.createGain();
-  gain.gain.setValueAtTime(gainValue || 0.05, audio.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + seconds);
-  source.connect(filter);
-  filter.connect(gain);
-  gain.connect(audio.destination);
-  source.start();
-}
-
-export const sounds = {
-  step() {
-    noise(0.05, 0.02, 500);
-  },
-  pickup() {
-    tone(880, 0.12, 'sine', 0.07);
-    setTimeout(() => tone(1318, 0.18, 'sine', 0.07), 70);
-  },
-  keycard() {
-    noise(0.18, 0.05, 3200);
-    setTimeout(() => tone(1046, 0.12, 'sine', 0.06), 120);
-  },
-  unlock() {
-    tone(220, 0.1, 'square', 0.05);
-    setTimeout(() => tone(660, 0.16, 'sine', 0.07), 90);
-  },
-  dialLock() {
-    tone(1568, 0.1, 'triangle', 0.09);
-  },
-  dialMiss() {
-    tone(160, 0.25, 'sawtooth', 0.08, 90);
-  },
-  vaultOpen() {
-    [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => tone(f, 0.22, 'triangle', 0.08), i * 90));
-  },
-  alarm() {
-    tone(740, 0.3, 'sawtooth', 0.06, 980);
-  },
-  caught() {
-    tone(220, 0.5, 'sawtooth', 0.09, 55);
-    noise(0.4, 0.06, 800);
-  },
-  win() {
-    [523, 659, 784, 1046, 1318].forEach((f, i) => setTimeout(() => tone(f, 0.3, 'triangle', 0.08), i * 110));
-  },
-  lose() {
-    tone(196, 0.9, 'sine', 0.08, 98);
-  },
-  click() {
-    tone(1200, 0.05, 'sine', 0.05);
-  },
+export const sfx = {
+  pickup(a) { beep(a, 880, 120, 'sine', 0.12); },
+  keycard(a) { beep(a, 660, 100, 'sine', 0.12); setTimeout(() => beep(a, 990, 140, 'sine', 0.12), 90); },
+  alarm(a) { beep(a, 220, 200, 'sawtooth', 0.08); },
+  chase(a) { beep(a, 440, 90, 'square', 0.07); setTimeout(() => beep(a, 330, 90, 'square', 0.07), 100); },
+  caught(a) { beep(a, 180, 300, 'sawtooth', 0.12); },
+  chip(a, i) { beep(a, [523, 659, 784, 1046][i] || 523, 160, 'sine', 0.14); },
+  win(a) { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(a, f, 200, 'sine', 0.12), i * 130)); },
+  click(a) { beep(a, 1200, 40, 'sine', 0.06); },
 };

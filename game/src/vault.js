@@ -1,69 +1,88 @@
-// NIGHT VAULT — the vault dial.
-// The vault does not open for a key: it opens for a steady hand. A pointer
-// spins around the dial and three tumblers wait, each with a green target
-// arc. Press the action key while the pointer sits inside the arc and the
-// tumbler locks with a click; press outside it and the vault buzzes, the
-// alarm jumps, and the tumbler stays put. Each tumbler spins faster than
-// the last. Three locks and the vault swings open on the Aurum Diamond.
+// NEON VAULT — The Golden Chip Job: the vault's chip-sequence lock.
+// The vault flashes a run of neon chips; the thief repeats it by pressing
+// 1-4 or clicking the chips. Three rounds, each one chip longer. A wrong
+// chip costs alarm and the round flashes again. This is pure logic — no
+// canvas here — so a headless test can crack the whole vault.
 
-import { DIAL, ALARM } from './config.js';
-import { angleDifference } from './level.js';
+import { LOCK, ALARM } from './config.js';
 
-export function makeDial() {
+export const CHIP_COLORS = ['#ff2e88', '#2ee6ff', '#ffd23e', '#7dff5e'];
+export const CHIP_KEYS = ['1', '2', '3', '4'];
+
+export function makeLock() {
   return {
-    active: false,
-    pointer: 0, // current pointer angle, radians
-    tumbler: 0, // which tumbler is being cracked (0..2)
-    targets: [0, 0, 0], // target arc centre per tumbler
-    locked: [false, false, false],
-    done: false,
-    flash: 0, // seconds of red flash after a miss
+    state: 'idle', // idle | showing | input | done
+    round: 0,
+    sequence: [],
+    showIndex: 0,
+    showTimer: 0,
+    lit: -1, // which chip is lit right now, -1 for none
+    inputIndex: 0,
+    alarmCost: 0, // accumulated miss cost for the game to collect
+    message: '',
   };
 }
 
-export function openDial(dial) {
-  dial.active = true;
-  dial.pointer = 0;
-  dial.tumbler = 0;
-  dial.locked = [false, false, false];
-  dial.done = false;
-  dial.flash = 0;
-  dial.targets = [
-    Math.random() * Math.PI * 2,
-    Math.random() * Math.PI * 2,
-    Math.random() * Math.PI * 2,
-  ];
+export function startLock(lock, random = Math.random) {
+  lock.round = 0;
+  lock.message = '';
+  nextRound(lock, random);
 }
 
-export function closeDial(dial) {
-  dial.active = false;
+function nextRound(lock, random) {
+  const len = LOCK.firstLength + lock.round;
+  lock.sequence = Array.from({ length: len }, () => Math.floor(random() * 4));
+  lock.showIndex = 0;
+  lock.showTimer = LOCK.gapMs / 1000;
+  lock.lit = -1;
+  lock.inputIndex = 0;
+  lock.state = 'showing';
 }
 
-// Spin the pointer. The world is paused while the dial is open, so the
-// crack is a pure timing test — the tension is the alarm a miss costs.
-export function updateDial(dial, dt) {
-  if (!dial.active || dial.done) return;
-  dial.pointer += DIAL.speeds[dial.tumbler] * dt;
-  if (dial.pointer > Math.PI * 2) dial.pointer -= Math.PI * 2;
-  if (dial.flash > 0) dial.flash -= dt;
-}
-
-// Try to lock the current tumbler. Returns 'lock', 'miss' or 'open'.
-export function lockTumbler(dial, game) {
-  if (!dial.active || dial.done) return null;
-  const target = dial.targets[dial.tumbler];
-  const off = Math.abs(angleDifference(dial.pointer, target));
-  if (off <= DIAL.targetArc / 2) {
-    dial.locked[dial.tumbler] = true;
-    dial.tumbler += 1;
-    if (dial.tumbler >= DIAL.tumblers) {
-      dial.done = true;
-      dial.active = false;
-      return 'open';
+// dt in seconds. Returns 'round' when a round is completed, 'done' when
+// the whole lock opens, 'miss' on a wrong chip, or null.
+export function stepLock(lock, dt) {
+  if (lock.state !== 'showing') return null;
+  lock.showTimer -= dt;
+  if (lock.showTimer > 0) return null;
+  if (lock.lit >= 0) {
+    // The lit chip goes dark; pause before the next flash.
+    lock.lit = -1;
+    lock.showTimer = LOCK.gapMs / 1000;
+    lock.showIndex += 1;
+    if (lock.showIndex >= lock.sequence.length) {
+      lock.state = 'input';
+      lock.message = 'Repeat the sequence — 1-4 or click the chips';
     }
-    return 'lock';
+    return null;
   }
-  dial.flash = 0.4;
-  game.alarm = Math.min(ALARM.max, game.alarm + ALARM.dialMissCost);
+  // Light the next chip in the sequence.
+  lock.lit = lock.sequence[lock.showIndex];
+  lock.showTimer = LOCK.flashMs / 1000;
+  return null;
+}
+
+export function pressChip(lock, index, random = Math.random) {
+  if (lock.state !== 'input') return null;
+  if (index === lock.sequence[lock.inputIndex]) {
+    lock.inputIndex += 1;
+    if (lock.inputIndex >= lock.sequence.length) {
+      lock.round += 1;
+      if (lock.round >= LOCK.rounds) {
+        lock.state = 'done';
+        lock.message = 'The vault clicks open.';
+        return 'done';
+      }
+      nextRound(lock, random);
+      lock.message = `Round ${lock.round + 1} — watch the chips`;
+      return 'round';
+    }
+    return 'ok';
+  }
+  // Wrong chip: the lock buzzes, the alarm climbs, and the round flashes
+  // again from the start.
+  lock.alarmCost += ALARM.lockMissCost;
+  lock.message = 'Wrong chip! The lock flashes the sequence again.';
+  nextRound(lock, random);
   return 'miss';
 }

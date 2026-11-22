@@ -1,226 +1,127 @@
-// NIGHT VAULT — boot and the game loop.
-// Wires the canvas, the keys, the engine and the sounds together, and runs
-// the loop. It also stages screenshots: ?scene=cover, spotted, win or
-// title puts the game into that exact frame and freezes it, so the shots
-// the maker takes are the game itself, deterministic and repeatable.
+// NEON VAULT — The Golden Chip Job: bootstrap and input.
+// Wires the canvas, the keys, the mouse and the animation loop together
+// and routes each frame to the right screen: title, playing, the vault
+// lock, pause, or an end screen. The game object is exposed on
+// window.__neon so a playtest can drive it and take screenshots.
 
-import { VIEW, GUARD } from './config.js';
-import { ENTRY, HELIPAD, VAULT, KEYCARD, distance } from './level.js';
-import { makeGame, resetGame, updateGame, dialAction } from './game.js';
-import { renderWorld } from './render.js';
-import {
-  drawHud, drawTitleScreen, drawHowToScreen, drawPausedScreen,
-  drawCaughtScreen, drawLockdownScreen, drawTimeoutScreen,
-  drawWinScreen, drawDial,
-} from './hud.js';
-import { sounds, unlockAudio, toggleMute } from './audio.js';
+import { VIEW } from './config.js';
+import { makeGame, startGame, stepGame, stepLockModal, pressLockChip, interact, trySmoke, tryEmp, currentPrompt } from './game.js';
+import { render, cameraFor } from './render.js';
+import { drawHud, drawTitle, drawPaused, drawLock, drawEnd } from './hud.js';
+import { makeAudio, sfx } from './audio.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-
 const game = makeGame();
-const keys = {
-  up: false, down: false, left: false, right: false,
-  sneak: false, action: false, smoke: false, emp: false,
+const audio = makeAudio();
+const keys = new Set();
+let lastTime = 0;
+
+// Screenshot hook: the playtest drives the game through this object and
+// never touches the DOM. It is not part of the game the player sees.
+window.__neon = {
+  game,
+  start: () => { if (game.state === 'title') startGame(game); },
+  teleport: (x, y) => { game.player.x = x; game.player.y = y; },
+  setAlarm: (v) => { game.alarm = v; game.maxAlarm = Math.max(game.maxAlarm, v); },
+  openLock: () => { game.state = 'lock'; },
+  win: () => { game.state = 'win'; game.endStats = { loot: 1250, timeBonus: 420, ghost: 500, total: 2170 }; },
+  shot: () => document.body.classList.add('shot'),
 };
 
-const params = new URLSearchParams(window.location.search);
-const scene = params.get('scene');
-const shotMode = params.get('shot') === '1';
-
-// --- Input: keyboard and click-to-move. ---
-
-const KEYMAP = {
-  ArrowUp: 'up', KeyW: 'up',
-  ArrowDown: 'down', KeyS: 'down',
-  ArrowLeft: 'left', KeyA: 'left',
-  ArrowRight: 'right', KeyD: 'right',
-  ShiftLeft: 'sneak', ShiftRight: 'sneak',
-};
-
-window.addEventListener('keydown', (event) => {
-  unlockAudio();
-  if (event.repeat) return;
-  const mapped = KEYMAP[event.code];
-  if (mapped) {
-    keys[mapped] = true;
-    event.preventDefault();
-    return;
-  }
-  if (event.code === 'KeyE') {
-    keys.action = true;
-    if (game.state === 'dial') dialAction(game);
-  }
-  if (event.code === 'KeyQ') keys.smoke = true;
-  if (event.code === 'KeyF') keys.emp = true;
-  if (event.code === 'KeyM') toggleMute();
-  if (event.code === 'KeyP') {
-    if (game.state === 'playing') game.state = 'paused';
-    else if (game.state === 'paused') game.state = 'playing';
-  }
-  if (event.code === 'KeyH') {
-    if (game.state === 'title') game.state = 'howto';
-    else if (game.state === 'howto') game.state = 'title';
-  }
-  if (event.code === 'Enter') {
-    if (game.state === 'title' || game.state === 'howto') {
-      resetGame(game);
-    }
-  }
-  if (event.code === 'KeyR') {
-    if (['caught', 'lockdown', 'timeout', 'win'].includes(game.state)) {
-      resetGame(game);
-    }
-  }
-  if (event.code === 'Escape') {
-    if (game.state === 'dial') {
-      game.dial.active = false;
-      game.state = 'playing';
-    }
-  }
-});
-
-window.addEventListener('keyup', (event) => {
-  const mapped = KEYMAP[event.code];
-  if (mapped) keys[mapped] = false;
-});
-
-canvas.addEventListener('pointerdown', (event) => {
-  unlockAudio();
-  if (game.state !== 'playing') return;
+function screenPos(e) {
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
-  const clickX = (event.clientX - rect.left) * scaleX;
-  const clickY = (event.clientY - rect.top) * scaleY;
-  const camX = Math.max(0, Math.min(1440 - VIEW.w, game.player.x - VIEW.w / 2));
-  const camY = Math.max(0, Math.min(900 - VIEW.h, game.player.y - VIEW.h / 2));
-  game.player.clickTarget = { x: clickX + camX, y: clickY + camY };
+  return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+}
+
+canvas.addEventListener('click', (e) => {
+  if (game.state === 'lock') {
+    // Click a chip in the lock modal.
+    const size = 84;
+    const gap = 26;
+    const total = 4 * size + 3 * gap;
+    const x0 = (VIEW.w - total) / 2;
+    const y0 = 210;
+    const p = screenPos(e);
+    for (let i = 0; i < 4; i++) {
+      const cx = x0 + i * (size + gap) + size / 2;
+      const cy = y0 + size / 2;
+      if (Math.hypot(p.x - cx, p.y - cy) < size / 2) {
+        const r = pressLockChip(game, i);
+        if (r) sfx.chip(audio, i);
+        return;
+      }
+    }
+    return;
+  }
+  if (game.state !== 'playing') return;
+  // Click to walk: convert the screen point into world coordinates.
+  const p = screenPos(e);
+  const cam = cameraFor(game.player);
+  game.player.clickTarget = { x: p.x + cam.x, y: p.y + cam.y };
+  sfx.click(audio);
 });
 
-// --- Sounds: the engine pushes event names; this drains them. ---
-
-function drainEvents() {
-  for (const event of game.events) {
-    const fn = sounds[event];
-    if (fn) fn();
-  }
-  game.events.length = 0;
-}
-
-// --- Screenshot staging: put the game into a chosen frame and freeze. ---
-
-function stageScene(name) {
-  if (name === 'title') {
-    game.state = 'title';
-    game.frozen = true;
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+  if (k === 'enter' && game.state === 'title') { startGame(game); return; }
+  if (k === 'r') { startGame(game); return; }
+  if (k === 'm') { audio.muted = !audio.muted; return; }
+  if (k === 'p' && (game.state === 'playing' || game.state === 'paused')) {
+    game.state = game.state === 'playing' ? 'paused' : 'playing';
     return;
   }
-  resetGame(game);
-  game.frozen = true;
-  if (name === 'win') {
-    game.state = 'win';
-    game.hasDiamond = true;
-    game.lootValue = 2450;
-    game.timeLeft = 214;
-    game.maxAlarm = 18;
+  if (game.state === 'lock') {
+    if (k === 'escape') { game.state = 'playing'; return; }
+    const idx = ['1', '2', '3', '4'].indexOf(k);
+    if (idx >= 0) {
+      const r = pressLockChip(game, idx);
+      if (r) sfx.chip(audio, idx);
+    }
     return;
   }
-  if (name === 'cover') {
-    // Mid-job on the trading floor: the thief crossing with loot in
-    // reach, two guards with cones, a camera beam, and the alarm meter
-    // already warm — everything the judge's first criterion asks for.
-    game.player.x = 720;
-    game.player.y = 560;
-    game.player.angle = -Math.PI / 2;
-    game.hasKeycard = true;
-    game.vaultDoorLocked = false;
-    game.lootValue = 350;
-    game.alarm = 34;
-    game.maxAlarm = 34;
-    game.timeLeft = 268;
-    game.guards[1].x = 420;
-    game.guards[1].y = 560;
-    game.guards[1].angle = Math.PI;
-    game.guards[2].x = 980;
-    game.guards[2].y = 560;
-    game.guards[2].angle = 0;
-    game.guards[1].suspicion = 0.4;
-    game.cameras[1].angle = Math.PI / 2 + 0.5;
-    return;
-  }
-  if (name === 'spotted') {
-    // A guard has the thief dead in his cone and is closing in.
-    game.player.x = 700;
-    game.player.y = 560;
-    game.player.angle = Math.PI;
-    game.hasKeycard = true;
-    game.vaultDoorLocked = false;
-    game.lootValue = 200;
-    game.alarm = 68;
-    game.maxAlarm = 68;
-    game.timeLeft = 190;
-    game.guards[2].x = 860;
-    game.guards[2].y = 560;
-    game.guards[2].angle = Math.PI;
-    game.guards[2].state = 'chase';
-    game.guards[2].suspicion = 1;
-    game.guards[2].lastSeenX = game.player.x;
-    game.guards[2].lastSeenY = game.player.y;
-    game.cameras[2].locked = true;
-  }
-}
+  if (game.state !== 'playing') return;
+  keys.add(k);
+  if (k === 'e') interact(game);
+  if (k === 'q') { if (trySmoke(game)) sfx.click(audio); }
+  if (k === 'f') { if (tryEmp(game)) sfx.click(audio); }
+});
 
-if (scene) stageScene(scene);
+window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 
-// In shot mode the page is just the canvas, so a headless screenshot
-// captures the game at exactly 960 by 600.
-if (shotMode) {
-  document.body.classList.add('shot');
-}
+function frame(t) {
+  const dt = Math.min(0.05, (t - lastTime) / 1000 || 0.016);
+  lastTime = t;
+  ctx.clearRect(0, 0, VIEW.w, VIEW.h);
 
-// --- The loop. ---
-
-let last = performance.now();
-
-function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000);
-  last = now;
-  updateGame(game, keys, dt);
-  drainEvents();
-
-  ctx.save();
-  if (game.shake > 0) {
-    ctx.translate((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
-  }
   if (game.state === 'title') {
-    renderWorld(ctx, game);
-    drawTitleScreen(ctx);
-  } else if (game.state === 'howto') {
-    renderWorld(ctx, game);
-    drawHowToScreen(ctx);
+    render(ctx, game);
+    drawTitle(ctx, game);
   } else if (game.state === 'paused') {
-    renderWorld(ctx, game);
-    drawPausedScreen(ctx);
-  } else if (game.state === 'caught') {
-    renderWorld(ctx, game);
-    drawCaughtScreen(ctx, game);
-  } else if (game.state === 'lockdown') {
-    renderWorld(ctx, game);
-    drawLockdownScreen(ctx, game);
-  } else if (game.state === 'timeout') {
-    renderWorld(ctx, game);
-    drawTimeoutScreen(ctx, game);
-  } else if (game.state === 'win') {
-    renderWorld(ctx, game);
-    drawWinScreen(ctx, game);
-  } else {
-    renderWorld(ctx, game);
+    render(ctx, game);
     drawHud(ctx, game);
-    if (game.state === 'dial') drawDial(ctx, game.dial);
+    drawPaused(ctx);
+  } else if (game.state === 'lock') {
+    render(ctx, game);
+    drawHud(ctx, game);
+    stepLockModal(game, dt);
+    drawLock(ctx, game);
+  } else if (game.state === 'playing') {
+    game.prompt = currentPrompt(game);
+    const event = stepGame(game, dt, keys);
+    if (event === 'chase') sfx.chase(audio);
+    else if (event === 'lock') sfx.alarm(audio);
+    else if (event === 'caught') sfx.caught(audio);
+    render(ctx, game);
+    drawHud(ctx, game);
+  } else {
+    render(ctx, game);
+    drawHud(ctx, game);
+    drawEnd(ctx, game);
   }
-  ctx.restore();
-
   requestAnimationFrame(frame);
 }
 

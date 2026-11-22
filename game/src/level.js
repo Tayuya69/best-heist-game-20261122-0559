@@ -1,135 +1,148 @@
-// NIGHT VAULT — the Aurum Bank tower floor plan.
-// The tower is one floor, 1440 by 900, in four bands: the rooftop (entry
-// and escape), the executive offices (the keycard), the trading floor
-// (open, watched), and the vault floor (the vault). Walls are solid
-// rectangles; doors are gaps in them. Cover blocks movement and sight.
-// Geometry helpers here answer the two questions the game keeps asking:
-// can a circle move here, and can one point see another?
+// NEON VAULT — The Golden Chip Job: the casino floor.
+// One 1440x900 floor in four bands: the VIP lounge and the vault room up
+// top, the gambling floor in the middle, the cashier cage at the right, and
+// the parking garage along the bottom. Walls are rects with door gaps; the
+// vault door is a locked door the VIP keycard opens. Cover rects block
+// movement and sight. Every waypoint the thief must reach is listed in
+// WAYPOINTS so a test can prove the whole job is walkable.
 
 import { WORLD } from './config.js';
 
-const WALL = 12; // wall thickness
+export const ENTRY = { x: 90, y: 830 };
+export const ESCAPE = { x: 90, y: 830, r: 34 };
 
-// Every wall is { x, y, w, h }. Doors are simply gaps: no wall is drawn
-// where a door belongs. The vault-floor door is a separate locked door.
+// Floor zones, drawn back to front. The garage is the bottom band, the
+// gambling floor is the middle, the VIP lounge and vault room share the
+// top band, and the cage sits inside the gambling floor's right side.
+export const ZONES = [
+  { x: 0, y: 0, w: 1020, h: 280, floor: 'vipFloor', label: 'VIP LOUNGE' },
+  { x: 1036, y: 0, w: 404, h: 280, floor: 'vaultFloor', label: 'VAULT' },
+  { x: 0, y: 296, w: 1440, h: 344, floor: 'casinoFloor', label: 'CASINO FLOOR' },
+  { x: 1096, y: 436, w: 344, h: 204, floor: 'cageFloor', label: 'CASHIER' },
+  { x: 0, y: 656, w: 1440, h: 244, floor: 'garageFloor', label: 'PARKING' },
+];
+
+// Walls: thickness 16. The y=280 wall splits the top band from the floor
+// (doors at x 120-200 and 640-720); the y=640 wall splits the floor from
+// the garage (doors at 120-200, 640-720, 1200-1280). The vault room's left
+// wall has its door gap at y 120-200; the cage's left wall has its door
+// gap at y 500-580 and its top wall is solid.
 export const WALLS = [
-  // Outer shell.
-  { x: 0, y: 0, w: WORLD.w, h: WALL },
-  { x: 0, y: WORLD.h - WALL, w: WORLD.w, h: WALL },
-  { x: 0, y: 0, w: WALL, h: WORLD.h },
-  { x: WORLD.w - WALL, y: 0, w: WALL, h: WORLD.h },
-  // Rooftop / offices boundary (y = 180), doors at x 300-380 and 1060-1140.
-  { x: WALL, y: 180, w: 288, h: WALL },
-  { x: 380, y: 180, w: 680, h: WALL },
-  { x: 1140, y: 180, w: 288, h: WALL },
-  // Offices / trading boundary (y = 450), doors at x 500-580 and 860-940.
-  { x: WALL, y: 450, w: 488, h: WALL },
-  { x: 580, y: 450, w: 280, h: WALL },
-  { x: 940, y: 450, w: 488, h: WALL },
-  // Trading / vault boundary (y = 700), one gap for the locked door.
-  { x: WALL, y: 700, w: 648, h: WALL },
-  { x: 780, y: 700, w: 648, h: WALL },
-  // Manager's office (left), split from the corridor at x = 480.
-  { x: 480, y: 180, w: WALL, h: 100 },
-  { x: 480, y: 360, w: WALL, h: 90 },
-  // Meeting room (right), split from the corridor at x = 960.
-  { x: 960, y: 180, w: WALL, h: 100 },
-  { x: 960, y: 360, w: WALL, h: 90 },
-  // Vault room (centre of the vault floor), doorway at x 660-780 on top.
-  { x: 540, y: 740, w: 120, h: WALL },
-  { x: 780, y: 740, w: 120, h: WALL },
-  { x: 540, y: 740, w: WALL, h: 140 },
-  { x: 888, y: 740, w: WALL, h: 140 },
+  { x: 0, y: 280, w: 120, h: 16 },
+  { x: 200, y: 280, w: 440, h: 16 },
+  { x: 720, y: 280, w: 720, h: 16 },
+  { x: 0, y: 640, w: 120, h: 16 },
+  { x: 200, y: 640, w: 440, h: 16 },
+  { x: 720, y: 640, w: 480, h: 16 },
+  { x: 1280, y: 640, w: 160, h: 16 },
+  { x: 1020, y: 0, w: 16, h: 120 },
+  { x: 1020, y: 200, w: 16, h: 80 },
+  { x: 1080, y: 420, w: 360, h: 16 },
+  { x: 1080, y: 420, w: 16, h: 80 },
+  { x: 1080, y: 580, w: 16, h: 60 },
 ];
 
-// The vault-floor door: solid until the keycard opens it.
-export const VAULT_DOOR = { x: 660, y: 700, w: 120, h: WALL, locked: true };
+// The vault door fills the vault room's door gap. It blocks movement and
+// sight until the thief carries the VIP keycard.
+export const DOORS = [
+  { id: 'vault', x: 1020, y: 120, w: 16, h: 80, locked: true },
+];
 
-// Cover: solid blocks that stop movement and block sight. Each has a kind
-// so the renderer can draw it as a desk, a terminal, a planter or a safe.
+// Cover: slot machines, card tables, the roulette wheel, VIP couches and
+// the bar, the cage counter, and parked cars. Each rect blocks movement
+// and sight, so the thief reads the room and picks a route between them.
 export const COVER = [
-  // Rooftop: air-conditioning units and planters.
-  { x: 200, y: 60, w: 120, h: 60, kind: 'unit' },
-  { x: 1100, y: 60, w: 120, h: 60, kind: 'unit' },
-  { x: 500, y: 60, w: 80, h: 40, kind: 'plant' },
-  { x: 820, y: 60, w: 80, h: 40, kind: 'plant' },
-  // Offices: the manager's desk (the keycard sits on it), meeting desk,
-  // and two work desks in the central corridor.
-  { x: 240, y: 280, w: 120, h: 50, kind: 'desk' },
-  { x: 1080, y: 280, w: 120, h: 50, kind: 'desk' },
-  { x: 600, y: 300, w: 100, h: 50, kind: 'desk' },
-  { x: 780, y: 300, w: 100, h: 50, kind: 'desk' },
-  // Trading floor: two rows of terminal desks.
-  { x: 200, y: 520, w: 160, h: 60, kind: 'terminal' },
-  { x: 500, y: 520, w: 160, h: 60, kind: 'terminal' },
-  { x: 800, y: 520, w: 160, h: 60, kind: 'terminal' },
-  { x: 1100, y: 520, w: 160, h: 60, kind: 'terminal' },
-  { x: 350, y: 620, w: 160, h: 60, kind: 'terminal' },
-  { x: 950, y: 620, w: 160, h: 60, kind: 'terminal' },
-  // Vault floor: gold pallets inside the vault room and a security desk.
-  { x: 580, y: 780, w: 70, h: 46, kind: 'safe' },
-  { x: 800, y: 780, w: 70, h: 46, kind: 'safe' },
-  { x: 1100, y: 780, w: 120, h: 50, kind: 'desk' },
+  // Slot machines, two rows on the gambling floor. The lanes between
+  // them are 50 wide, so the 26-wide thief slips through without wedging.
+  { x: 200, y: 340, w: 70, h: 50, kind: 'slot' },
+  { x: 320, y: 340, w: 70, h: 50, kind: 'slot' },
+  { x: 440, y: 340, w: 70, h: 50, kind: 'slot' },
+  { x: 560, y: 340, w: 70, h: 50, kind: 'slot' },
+  { x: 200, y: 480, w: 70, h: 50, kind: 'slot' },
+  { x: 320, y: 480, w: 70, h: 50, kind: 'slot' },
+  { x: 440, y: 480, w: 70, h: 50, kind: 'slot' },
+  { x: 560, y: 480, w: 70, h: 50, kind: 'slot' },
+  // Card tables and the roulette wheel.
+  { x: 760, y: 360, w: 120, h: 70, kind: 'table' },
+  { x: 760, y: 520, w: 120, h: 70, kind: 'table' },
+  { x: 950, y: 440, w: 90, h: 90, kind: 'roulette' },
+  // VIP lounge: couches and the bar.
+  { x: 120, y: 60, w: 110, h: 50, kind: 'couch' },
+  { x: 420, y: 60, w: 110, h: 50, kind: 'couch' },
+  { x: 600, y: 60, w: 180, h: 40, kind: 'bar' },
+  // Cashier cage counter.
+  { x: 1150, y: 470, w: 220, h: 30, kind: 'counter' },
+  // Parked cars in the garage, two rows, the left lane kept clear.
+  { x: 320, y: 700, w: 110, h: 60, kind: 'car' },
+  { x: 540, y: 700, w: 110, h: 60, kind: 'car' },
+  { x: 760, y: 700, w: 110, h: 60, kind: 'car' },
+  { x: 980, y: 700, w: 110, h: 60, kind: 'car' },
+  { x: 320, y: 800, w: 110, h: 60, kind: 'car' },
+  { x: 540, y: 800, w: 110, h: 60, kind: 'car' },
+  { x: 760, y: 800, w: 110, h: 60, kind: 'car' },
+  { x: 980, y: 800, w: 110, h: 60, kind: 'car' },
 ];
 
-// The vault itself: a big circular safe door at the back of the vault room.
-export const VAULT = { x: 720, y: 828, radius: 42 };
+// The VIP keycard lies on the VIP table; the cage alarm panel sits behind
+// the cashier counter; the vault holds the jackpot.
+export const KEYCARD = { x: 300, y: 140, taken: false };
+export const CAGE_PANEL = { x: 1260, y: 540, disabled: false };
+export const VAULT = { x: 1230, y: 140, opened: false };
 
-// The helicopter pad on the rooftop: the escape. Win by standing on it
-// with the diamond.
-export const HELIPAD = { x: 120, y: 90, radius: 46 };
-
-// Where the thief drops in, and where a caught thief wakes up again.
-export const ENTRY = { x: 720, y: 150 };
-
-// The keycard, on the manager's desk — just in front of it, where a
-// thief can actually reach it.
-export const KEYCARD = { x: 300, y: 348 };
-
-// Side loot: cash stacks, gold bars and bonds scattered through the tower.
-export const LOOT_SPOTS = [
-  { x: 260, y: 340, kind: 'cash' },
-  { x: 1120, y: 340, kind: 'cash' },
-  { x: 250, y: 560, kind: 'cash' },
-  { x: 600, y: 560, kind: 'cash' },
-  { x: 900, y: 560, kind: 'cash' },
-  { x: 1200, y: 560, kind: 'cash' },
-  { x: 620, y: 800, kind: 'gold' },
-  { x: 840, y: 800, kind: 'gold' },
-  { x: 700, y: 300, kind: 'bond' },
-  { x: 1150, y: 800, kind: 'bond' },
+// Loose loot: chip stacks, cash and gold bars scattered where the thief
+// has to cross a guard's cone to reach them.
+export const LOOT = [
+  { x: 260, y: 420, kind: 'chip', value: 50, taken: false },
+  { x: 900, y: 340, kind: 'chip', value: 50, taken: false },
+  { x: 700, y: 600, kind: 'chip', value: 50, taken: false },
+  { x: 1100, y: 700, kind: 'chip', value: 50, taken: false },
+  { x: 180, y: 600, kind: 'cash', value: 100, taken: false },
+  { x: 1000, y: 560, kind: 'cash', value: 100, taken: false },
+  { x: 400, y: 820, kind: 'cash', value: 100, taken: false },
+  { x: 500, y: 120, kind: 'gold', value: 250, taken: false },
+  { x: 1350, y: 600, kind: 'gold', value: 250, taken: false },
 ];
 
-// Guard patrols. A guard walks its waypoints; 'loop' returns to the first
-// and goes around again, 'pingpong' walks back along the same route.
+// Guard patrols: name, waypoints, and the floor each one watches. Every
+// leg runs down a clear lane — between the slot rows, beside the tables,
+// clear of the roulette and the cage — so no guard ever clips through
+// the furniture it is supposed to watch.
 export const GUARD_ROUTES = [
-  { name: 'Rook', waypoints: [{ x: 600, y: 250 }, { x: 840, y: 250 }], mode: 'pingpong' },
-  { name: 'Vera', waypoints: [{ x: 200, y: 500 }, { x: 400, y: 500 }, { x: 400, y: 650 }, { x: 200, y: 650 }], mode: 'loop' },
-  { name: 'Kane', waypoints: [{ x: 1000, y: 550 }, { x: 1250, y: 550 }], mode: 'pingpong' },
-  { name: 'Sable', waypoints: [{ x: 600, y: 850 }, { x: 840, y: 850 }], mode: 'pingpong' },
-  { name: 'Moss', waypoints: [{ x: 300, y: 100 }, { x: 1100, y: 100 }], mode: 'pingpong' },
+  { name: 'Dante', pts: [[100, 320], [100, 600], [660, 600], [660, 320]] },
+  { name: 'Mira', pts: [[900, 320], [900, 600], [1060, 600], [1060, 320]] },
+  { name: 'Vince', pts: [[150, 150], [900, 150], [900, 240], [150, 240]] },
+  { name: 'Lola', pts: [[300, 680], [1300, 680], [1300, 880], [300, 880]] },
+  { name: 'Rex', pts: [[720, 460], [720, 620], [900, 620], [900, 460]] },
 ];
 
-// Cameras are wall mounts. Each sweeps its beam around restAngle; the beam
-// is drawn from the mount and locks on when the thief stands in it.
+// Cameras: fixed mounts that sweep a beam. Their rest angle points into
+// the room they watch.
 export const CAMERAS = [
-  { x: 720, y: 200, restAngle: Math.PI / 2 },
-  { x: 300, y: 470, restAngle: Math.PI / 2 },
-  { x: 1140, y: 470, restAngle: Math.PI / 2 },
-  { x: 720, y: 720, restAngle: Math.PI / 2 },
+  { x: 60, y: 300, rest: 0.6 },
+  { x: 1380, y: 300, rest: Math.PI - 0.6 },
+  { x: 1380, y: 880, rest: Math.PI + 0.6 },
+  { x: 60, y: 40, rest: 0.9 },
 ];
 
-// --- Geometry: the only math the game needs. ---
+// Every stop the job must reach, in the order the thief reaches them.
+// The test walks this list to prove the casino is traversable.
+export const WAYPOINTS = [
+  { x: 90, y: 830, name: 'entry' },
+  { x: 720, y: 480, name: 'casino floor' },
+  { x: 300, y: 140, name: 'keycard' },
+  { x: 1260, y: 540, name: 'cage panel' },
+  { x: 1020, y: 160, name: 'vault door' },
+  { x: 1230, y: 140, name: 'vault' },
+  { x: 90, y: 830, name: 'escape' },
+];
 
-// Every solid thing in the world: walls, cover, and the locked vault door
-// while it is locked. The vault door is passed in because it can open.
-export function solids(vaultDoorLocked) {
-  const list = WALLS.concat(COVER);
-  if (vaultDoorLocked) list.push(VAULT_DOOR);
-  return list;
+// --- geometry helpers shared by the player, the guards and the test ---
+
+export function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-function circleHitsRect(cx, cy, r, rect) {
+export function circleHitsRect(cx, cy, r, rect) {
   const nx = Math.max(rect.x, Math.min(cx, rect.x + rect.w));
   const ny = Math.max(rect.y, Math.min(cy, rect.y + rect.h));
   const dx = cx - nx;
@@ -137,65 +150,66 @@ function circleHitsRect(cx, cy, r, rect) {
   return dx * dx + dy * dy < r * r;
 }
 
-// True when a circle at (x, y) with radius r touches any solid.
-export function collides(x, y, r, vaultDoorLocked) {
-  for (const s of solids(vaultDoorLocked)) {
-    if (circleHitsRect(x, y, r, s)) return true;
+// All solid rects right now: walls, locked doors, and cover.
+export function solidRects(doors) {
+  const out = [...WALLS, ...COVER];
+  for (const d of doors) if (d.locked) out.push(d);
+  return out;
+}
+
+// True when the segment from (x1,y1) to (x2,y2) crosses any solid rect.
+// Used for guard and camera sight: a wall or a slot machine between the
+// watcher and the thief hides the thief.
+export function sightBlocked(x1, y1, x2, y2, solids) {
+  for (const s of solids) {
+    if (segmentHitsRect(x1, y1, x2, y2, s)) return true;
   }
   return false;
 }
 
-// Move a circle by (dx, dy) with wall sliding: try the full move, then
-// each axis alone, so the thief slides along walls instead of sticking.
-export function moveCircle(x, y, r, dx, dy, vaultDoorLocked) {
-  if (!collides(x + dx, y + dy, r, vaultDoorLocked)) return { x: x + dx, y: y + dy };
-  if (!collides(x + dx, y, r, vaultDoorLocked)) return { x: x + dx, y };
-  if (!collides(x, y + dy, r, vaultDoorLocked)) return { x, y: y + dy };
-  return { x, y };
-}
-
-function segmentHitsRect(x1, y1, x2, y2, rect) {
-  // A segment hits a rectangle when either end is inside it, or it
-  // crosses one of its four edges.
-  if (x1 >= rect.x && x1 <= rect.x + rect.w && y1 >= rect.y && y1 <= rect.y + rect.h) return true;
-  if (x2 >= rect.x && x2 <= rect.x + rect.w && y2 >= rect.y && y2 <= rect.y + rect.h) return true;
-  const edges = [
-    [rect.x, rect.y, rect.x + rect.w, rect.y],
-    [rect.x + rect.w, rect.y, rect.x + rect.w, rect.y + rect.h],
-    [rect.x + rect.w, rect.y + rect.h, rect.x, rect.y + rect.h],
-    [rect.x, rect.y + rect.h, rect.x, rect.y],
-  ];
-  for (const [ax, ay, bx, by] of edges) {
-    if (segmentsCross(x1, y1, x2, y2, ax, ay, bx, by)) return true;
+function segmentHitsRect(x1, y1, x2, y2, r) {
+  // Slab test: the segment enters the rect when its parametric interval
+  // overlaps the rect on both axes.
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  let t0 = 0;
+  let t1 = 1;
+  if (Math.abs(dx) < 1e-9) {
+    if (x1 < r.x || x1 > r.x + r.w) return false;
+  } else {
+    let a = (r.x - x1) / dx;
+    let b = (r.x + r.w - x1) / dx;
+    if (a > b) [a, b] = [b, a];
+    t0 = Math.max(t0, a);
+    t1 = Math.min(t1, b);
+    if (t0 > t1) return false;
   }
-  return false;
-}
-
-function segmentsCross(x1, y1, x2, y2, x3, y3, x4, y4) {
-  const d = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3);
-  if (d === 0) return false;
-  const t = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / d;
-  const u = ((x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)) / d;
-  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
-}
-
-// True when nothing solid stands between (x1, y1) and (x2, y2). Guards
-// and cameras use this before they can see the thief.
-export function hasLineOfSight(x1, y1, x2, y2, vaultDoorLocked) {
-  for (const s of solids(vaultDoorLocked)) {
-    if (segmentHitsRect(x1, y1, x2, y2, s)) return false;
+  if (Math.abs(dy) < 1e-9) {
+    if (y1 < r.y || y1 > r.y + r.h) return false;
+  } else {
+    let a = (r.y - y1) / dy;
+    let b = (r.y + r.h - y1) / dy;
+    if (a > b) [a, b] = [b, a];
+    t0 = Math.max(t0, a);
+    t1 = Math.min(t1, b);
+    if (t0 > t1) return false;
   }
   return true;
 }
 
-export function distance(ax, ay, bx, by) {
-  return Math.hypot(ax - bx, ay - by);
+// Move a circle by (dx,dy) against the solid rects, sliding along walls
+// instead of sticking: try the full move, then each axis on its own.
+export function moveCircle(x, y, r, dx, dy, solids) {
+  let nx = x + dx;
+  let ny = y + dy;
+  if (!hitsAny(nx, ny, r, solids)) return { x: nx, y: ny };
+  if (!hitsAny(nx, y, r, solids)) return { x: nx, y };
+  if (!hitsAny(x, ny, r, solids)) return { x, y: ny };
+  return { x, y };
 }
 
-// Smallest absolute difference between two angles, in radians.
-export function angleDifference(a, b) {
-  let d = a - b;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  return d;
+function hitsAny(x, y, r, solids) {
+  if (x < r || x > WORLD.w - r || y < r || y > WORLD.h - r) return true;
+  for (const s of solids) if (circleHitsRect(x, y, r, s)) return true;
+  return false;
 }
