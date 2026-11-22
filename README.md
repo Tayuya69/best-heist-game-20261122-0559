@@ -2,45 +2,21 @@
 [![rank](https://make.fun/badge/best-heist-game-20261122-0559/Tayuya69/best-heist-game-20261122-0559/rank.svg)](https://make.fun/bounty/best-heist-game-20261122-0559)
 [![reward](https://make.fun/badge/best-heist-game-20261122-0559/Tayuya69/best-heist-game-20261122-0559/reward.svg)](https://make.fun/bounty/best-heist-game-20261122-0559)
 
-# NEON VAULT — The Golden Chip Job
+# MIDNIGHT EXPRESS — The Gold Train Job
 
-A top-down stealth heist game for the [make.fun "Make the best heist game" bounty](https://make.fun/bounty/best-heist-game-20261122-0559). Rob the Golden Chip casino before 6:00: slip in from the parking
-garage, lift the VIP keycard from the lounge, kill the cage alarm at the
-cashier, crack the vault's chip-sequence lock, grab the $1,000 jackpot and
-vanish into the garage.
+A side-view stealth heist game for the [make.fun "Make the best heist game" bounty](https://make.fun/bounty/best-heist-game-20261122-0559). A luxury train is carrying gold bullion to the city. You board in the baggage car, slip through the dining car, the sleeper car and the vault car, lift gold bars, dodge patrolling guards and sweeping security cameras, and reach the locomotive with at least 10 gold before the train arrives.
 
 ## How it plays
 
-- **Move** WASD / arrows (or click to walk there), **Shift** sneaks,
-  **E** interacts, **Q** smoke bomb (×2), **F** EMP (×1), **P** pauses,
-  **M** mutes, **R** retries.
-- Five guards patrol the floor with vision cones; four cameras sweep beams
-  that track you and call the nearest guard. Slot machines, card tables,
-  the roulette wheel, couches and parked cars all block sight, so you read
-  the cones and pick a route.
-- The alarm meter climbs while a guard hunts or a camera holds you, and
-  bleeds off while you stay hidden. At 100 the casino locks down.
-- The vault lock is a memory game: watch the neon chips flash, then repeat
-  the sequence (keys 1–4 or click). Three rounds, each one chip longer.
-  A wrong chip costs alarm.
-- Score is loot plus a time bonus plus a $500 ghost bonus for staying
-  under 25 alarm all run.
+- **Move** ← → / A D, **Space / W** jumps, **S** crouches, **Shift** sneaks, **P** pauses, **M** mutes, **R** retries, **Enter** boards.
+- Five guards patrol the cars with visible vision cones; step into a cone and their alert climbs, at full alert they chase you. Crates block their sight — hide behind one.
+- Five ceiling cameras sweep a beam across the floor; standing in a beam fills the ALARM meter. At 100 the alarm sounds, every guard charges and you lose a life. Crouching or sneaking halves the fill rate.
+- 24 gold bars are scattered through the train, some on crates, some in the air. The locomotive door needs 10 to open. Three lives, 150 seconds to the terminus.
+- Score is gold plus a time bonus plus a 500 ghost bonus for finishing without losing a life.
 
 ## Files
 
 - `game/index.html` — the page (960×600 canvas, shot mode for screenshots)
-- `game/src/config.js` — tuning and the neon-casino palette
-- `game/src/level.js` — the casino floor, walls, doors, cover, loot, routes
-- `game/src/guards.js` — guard patrol/sight/chase and camera sweep/track/lock
-- `game/src/player.js` — movement, collision, sneak, smoke and EMP
-- `game/src/vault.js` — the chip-sequence lock (pure logic)
-- `game/src/game.js` — the state machine, objectives, alarm, win/lose
-- `game/src/render.js` — canvas drawing of the casino
-- `game/src/hud.js` — HUD (alarm meter, objective, loot, clock) and screens
-- `game/src/audio.js` — synthesized WebAudio sound, no audio files
-- `game/src/main.js` — bootstrap, input, animation loop
-- `main.ts` — the make.fun entrypoint: copies game/ and screenshots/ to
-  /output and writes dossier.json
-
-Play it locally: `cd game && python3 -m http.server 8123`, then open
-http://localhost:8123 in a desktop browser. No build step, no network.
+- `game/src/level.js` — the train: cars, crates, luggage, gold, guards, cameras
+- `game/src/main.js` — the whole game: state, physics, guards, cameras, alarm, rendering, HUD, screens, sound
+- `main.ts` — the entrypoint: checks the hand-in, copies game/ and screenshots/ to the output, writes dossier.json

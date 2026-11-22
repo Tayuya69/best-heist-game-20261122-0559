@@ -1,12 +1,11 @@
-// NEON VAULT — The Golden Chip Job: the make.fun entrypoint (Node,
-// standard library only). The game is this directory's game/ folder: plain
-// static files a desktop browser loads offline (game/index.html and its ES
-// modules, no library, no network request). Running this file hands the game
-// in: it copies game/ and screenshots/ from beside this file to /output and
-// writes /output/dossier.json, the summary the judge reads, using the vendored
-// make.fun library. Before writing anything it checks the hand-in against the
-// scorer's own caps, so a bad entry fails here loudly instead of scoring
-// zero on the server.
+// MIDNIGHT EXPRESS — The Gold Train Job: the make.fun entrypoint.
+// Node, standard library only. The game itself is the static files in
+// game/ beside this file (index.html plus its modules, no library, no
+// network request). Running this file hands the game in: it checks the
+// hand-in against the scorer's caps, copies game/ and screenshots/ into
+// the output directory, and writes dossier.json there with the vendored
+// make.fun library — the summary the judge reads. A bad entry fails here
+// loudly instead of scoring zero on the server.
 //
 // Play it locally with any static server, e.g.:
 //   cd game && python3 -m http.server 8123   # open http://localhost:8123
@@ -18,13 +17,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
-export const ENTRY_TITLE = 'NEON VAULT — The Golden Chip Job';
+export const ENTRY_TITLE = 'MIDNIGHT EXPRESS — The Gold Train Job';
 
 // The scorer's caps (reference/gate.json): only text_max_bytes shapes the
 // dossier bytes; the rest refuse an entry the scorer would refuse anyway —
-// more than 4 screenshots or one over 256 KiB, more than 993 files in game/
-// or 48 MiB of game files in all, or a path under game/ over 1000 bytes.
-const DOSSIER_OPTIONS = {
+// more than 4 screenshots or one over 256 KiB, more than 993 files in
+// game/ or 48 MiB of game files in all, or a path under game/ over
+// 1000 bytes.
+const CAPS = {
   text_max_bytes: 163840,
   screenshots: { max: 4, max_bytes: 262144 },
   game_max_files: 993,
@@ -32,51 +32,51 @@ const DOSSIER_OPTIONS = {
   game_path_max_bytes: 1000,
 };
 
-function walkGame(dir, out = { files: 0, bytes: 0 }) {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) walkGame(path, out);
-    else if (entry.isFile()) {
-      out.files += 1;
-      out.bytes += statSync(path).size;
+function countTree(dir, tally = { files: 0, bytes: 0 }) {
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, ent.name);
+    if (ent.isDirectory()) countTree(p, tally);
+    else if (ent.isFile()) {
+      tally.files += 1;
+      tally.bytes += statSync(p).size;
     }
   }
-  return out;
+  return tally;
 }
 
-// 3 or 4 screenshots, each a PNG or JPEG under the cap; the first by name
-// is the cover the judge sees first.
-function checkShots(dir) {
+// 3 or 4 screenshots, each a PNG or JPEG under the cap; the first by
+// name is the cover the judge sees first.
+function listShots(dir) {
   if (!existsSync(dir)) throw new Error(`screenshots/ is missing beside main.ts: ${dir}`);
-  const shots = readdirSync(dir).filter((n) => !n.startsWith('.')).sort();
-  if (shots.length < 3 || shots.length > DOSSIER_OPTIONS.screenshots.max) {
-    throw new Error(`need 3 or 4 screenshots, found ${shots.length}: ${shots.join(', ')}`);
+  const names = readdirSync(dir).filter((n) => !n.startsWith('.')).sort();
+  if (names.length < 3 || names.length > CAPS.screenshots.max) {
+    throw new Error(`need 3 or 4 screenshots, found ${names.length}: ${names.join(', ')}`);
   }
-  for (const name of shots) {
-    const path = join(dir, name);
-    const stats = statSync(path);
-    if (!stats.isFile()) throw new Error(`screenshot is not a file: ${name}`);
+  for (const name of names) {
+    const p = join(dir, name);
+    const st = statSync(p);
+    if (!st.isFile()) throw new Error(`screenshot is not a file: ${name}`);
     if (!/\.(png|jpe?g)$/i.test(name)) throw new Error(`screenshot must be PNG or JPEG: ${name}`);
-    if (stats.size > DOSSIER_OPTIONS.screenshots.max_bytes) {
-      throw new Error(`screenshot over 256 KiB: ${name} (${stats.size} bytes)`);
+    if (st.size > CAPS.screenshots.max_bytes) {
+      throw new Error(`screenshot over 256 KiB: ${name} (${st.size} bytes)`);
     }
   }
-  return shots;
+  return names;
 }
 
-function main() {
+function run() {
   const here = fileURLToPath(new URL('.', import.meta.url));
   const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-  const shots = checkShots(join(here, 'screenshots'));
-  const game = walkGame(join(here, 'game'));
+  const shots = listShots(join(here, 'screenshots'));
+  const game = countTree(join(here, 'game'));
 
   mkdirSync(out, { recursive: true });
   cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
   mkdirSync(join(out, 'screenshots'), { recursive: true });
   cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 
-  const dossier = buildDossier(out, DOSSIER_OPTIONS);
+  const dossier = buildDossier(out, CAPS);
   writeFileSync(join(out, 'dossier.json'), dossier);
 
   console.log(
@@ -86,4 +86,4 @@ function main() {
   );
 }
 
-main();
+run();
