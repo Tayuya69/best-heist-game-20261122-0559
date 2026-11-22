@@ -1,89 +1,103 @@
-// audio.js — synthesised sound, no audio files: WebAudio oscillators only.
-// Footsteps, a pickup chime, the alarm sting, the win jingle. Mute with M.
-// Everything is wrapped in try/catch: a browser without audio still plays.
-
-export class Sfx {
+// Sapphire Heist v2 — synthesised sound. WebAudio oscillators only, no
+// audio files: pickup chimes, alarm stings, the vault crack, footsteps and
+// the win / lose jingles. Created lazily on the first user gesture (browsers
+// block audio before interaction) and silenced with M.
+export class Sound {
   constructor() {
     this.ctx = null;
     this.muted = false;
-    this.master = 0.16;
   }
 
-  ensureContext() {
-    if (this.ctx) return this.ctx;
-    try {
-      const Ctor = window.AudioContext || window.webkitAudioContext;
-      if (!Ctor) return null;
-      this.ctx = new Ctor();
-    } catch {
-      this.ctx = null;
+  ensure() {
+    if (!this.ctx) {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AC();
+      } catch {
+        this.ctx = null;
+      }
     }
-    return this.ctx;
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
   }
 
-  // Start audio on the first user gesture (browsers block it before that).
-  unlock() {
-    const ctx = this.ensureContext();
-    if (ctx && ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-  }
-
-  toggleMute() {
-    this.muted = !this.muted;
-    return this.muted;
-  }
-
-  tone(freq, duration, type = 'sine', volume = 1, slideTo = null) {
-    if (this.muted) return;
-    const ctx = this.ensureContext();
-    if (!ctx) return;
-    try {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, ctx.currentTime + duration);
-      gain.gain.setValueAtTime(this.master * volume, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
-    } catch {
-      // Audio is decoration; never let it break the game.
-    }
-  }
-
-  footstep(sneaking) {
-    this.tone(sneaking ? 90 : 140, 0.06, 'triangle', sneaking ? 0.25 : 0.5);
+  tone(freq, dur, type = 'sine', vol = 0.12, when = 0) {
+    if (!this.ctx || this.muted) return;
+    const t0 = this.ctx.currentTime + when;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(vol, t0 + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.05);
   }
 
   pickup() {
-    this.tone(660, 0.12, 'sine', 0.9);
-    setTimeout(() => this.tone(990, 0.18, 'sine', 0.9), 90);
+    this.tone(880, 0.09, 'sine', 0.12);
+    this.tone(1318, 0.14, 'sine', 0.1, 0.07);
   }
 
-  sapphireCrack() {
-    this.tone(520, 0.1, 'square', 0.35, 780);
+  coin() {
+    this.tone(1174, 0.07, 'triangle', 0.1);
+    this.tone(1568, 0.1, 'triangle', 0.09, 0.06);
+  }
+
+  keycard() {
+    this.tone(523, 0.08, 'square', 0.06);
+    this.tone(784, 0.12, 'square', 0.06, 0.08);
+  }
+
+  unlock() {
+    this.tone(392, 0.1, 'triangle', 0.11);
+    this.tone(523, 0.1, 'triangle', 0.11, 0.09);
+    this.tone(659, 0.16, 'triangle', 0.11, 0.18);
   }
 
   alarmSting() {
-    this.tone(220, 0.35, 'sawtooth', 0.8, 440);
-    setTimeout(() => this.tone(220, 0.35, 'sawtooth', 0.8, 440), 180);
+    this.tone(220, 0.22, 'sawtooth', 0.09);
+    this.tone(185, 0.26, 'sawtooth', 0.09, 0.16);
   }
 
-  spotted() {
-    this.tone(180, 0.25, 'sawtooth', 0.7, 320);
+  cameraBeep() {
+    this.tone(1567, 0.06, 'square', 0.05);
+  }
+
+  crackGood() {
+    this.tone(1046, 0.1, 'sine', 0.12);
+    this.tone(1568, 0.16, 'sine', 0.11, 0.08);
+  }
+
+  crackBad() {
+    this.tone(160, 0.25, 'sawtooth', 0.1);
+  }
+
+  hackDone() {
+    this.tone(660, 0.08, 'triangle', 0.1);
+    this.tone(880, 0.08, 'triangle', 0.1, 0.07);
+    this.tone(1100, 0.14, 'triangle', 0.1, 0.14);
   }
 
   caught() {
-    this.tone(160, 0.6, 'sawtooth', 0.9, 60);
+    this.tone(330, 0.16, 'sawtooth', 0.11);
+    this.tone(233, 0.16, 'sawtooth', 0.11, 0.13);
+    this.tone(155, 0.3, 'sawtooth', 0.11, 0.26);
   }
 
   win() {
-    [523, 659, 784, 1046].forEach((freq, i) => {
-      setTimeout(() => this.tone(freq, 0.22, 'sine', 0.9), i * 130);
-    });
+    [523, 659, 784, 1046].forEach((f, i) => this.tone(f, 0.18, 'triangle', 0.11, i * 0.11));
+  }
+
+  lose() {
+    [392, 330, 262, 196].forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.1, i * 0.13));
+  }
+
+  // Soft footstep tick while the thief walks (called from the game loop).
+  footstep(sneaking) {
+    if (!this.ctx || this.muted) return;
+    this.tone(sneaking ? 140 : 190, 0.045, 'sine', sneaking ? 0.03 : 0.05);
   }
 }
