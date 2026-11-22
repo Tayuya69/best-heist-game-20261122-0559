@@ -1,7 +1,10 @@
+[![make.fun](https://make.fun/badge/best-heist-game-20261122-0559.svg)](https://make.fun/?ref=fmy43x6e&utm_source=github&utm_medium=readme&utm_campaign=best-heist-game-20261122-0559)
+[![rank](https://make.fun/badge/best-heist-game-20261122-0559/Tayuya69/best-heist-game-20261122-0559/rank.svg)](https://make.fun/bounty/best-heist-game-20261122-0559)
+[![reward](https://make.fun/badge/best-heist-game-20261122-0559/Tayuya69/best-heist-game-20261122-0559/reward.svg)](https://make.fun/bounty/best-heist-game-20261122-0559)
+
 # NEON VAULT — The Golden Chip Job
 
-A top-down stealth heist game for the make.fun "Make the best heist game"
-bounty. Rob the Golden Chip casino before 6:00: slip in from the parking
+A top-down stealth heist game for the [make.fun "Make the best heist game" bounty](https://make.fun/bounty/best-heist-game-20261122-0559). Rob the Golden Chip casino before 6:00: slip in from the parking
 garage, lift the VIP keycard from the lounge, kill the cage alarm at the
 cashier, crack the vault's chip-sequence lock, grab the $1,000 jackpot and
 vanish into the garage.
