@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SAPPHIRE HEIST — The Meridian Museum Job</title>
+<title>NIGHT VAULT — The Aurum Bank Job</title>
 <style>
   html, body {
     margin: 0;
@@ -43,14 +43,19 @@
     text-align: center;
     max-width: 960px;
   }
+  /* Shot mode: the page is just the canvas, so a headless screenshot
+     captures the game at exactly 960 by 600. */
+  body.shot { gap: 0; }
+  body.shot h1, body.shot p.help { display: none; }
+  body.shot canvas { width: 960px; border: 0; border-radius: 0; }
 </style>
 </head>
 <body>
-<h1>SAPPHIRE HEIST <span>— The Meridian Museum Job</span></h1>
+<h1>NIGHT VAULT <span>— The Aurum Bank Job</span></h1>
 <canvas id="game" width="960" height="600"></canvas>
-<p class="help">Steal the Star Sapphire from the Meridian Museum: lift the keycard, unlock the vault,
-crack the case, and walk out the front door. WASD / arrows move, Shift sneaks, E interacts,
-click walks there, P pauses, M mutes, R retries.</p>
+<p class="help">Steal the Aurum Diamond from the Aurum Bank tower: drop in on the rooftop, lift the keycard
+from the manager’s office, crack the vault dial, and be on the helicopter pad before dawn.
+WASD / arrows move, Shift sneaks, E interacts, Q smoke, F EMP, click walks there, P pauses, M mutes, R retries.</p>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

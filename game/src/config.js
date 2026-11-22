@@ -1,65 +1,112 @@
-// Sapphire Heist v2 — tuning constants. Every number the game uses lives here
-// so the feel can be retuned without touching the systems.
-export const CFG = {
-  // Canvas / world (logical pixels; the page scales the canvas with CSS).
-  W: 960,
-  H: 600,
+// NIGHT VAULT — The Aurum Bank Job: tuning and palette.
+// One place for every number the game balances on, so the whole job can be
+// retuned without touching the logic. All speeds are pixels per second,
+// all times are seconds, all angles are radians.
 
-  // Player.
-  playerRadius: 13,
-  walkSpeed: 118,      // px per second
-  sneakSpeed: 58,      // px per second while Shift is held
-  sneakDetectMul: 0.58, // detection range multiplier while sneaking
-  sneakGainMul: 0.55,   // suspicion gain multiplier while sneaking
-  hearts: 3,
-  catchInvuln: 2.0,    // seconds of invulnerability after being caught
-  respawn: { x: 60, y: 540 }, // lobby front-door spawn
+export const WORLD = { w: 1440, h: 900 };
 
-  // Timer.
-  timeLimit: 300, // 5:00
+export const VIEW = { w: 960, h: 600 };
 
-  // Guards.
-  guardRadius: 14,
-  guardPatrolSpeed: 62,
-  guardChaseSpeed: 128,
-  guardVisionRange: 165,
-  guardVisionHalfAngle: 0.61, // ~35 degrees
-  suspicionPerSec: 55,   // suspicion gained while the player is inside a lit cone
-  suspicionDecay: 26,    // per second while unseen
-  chaseMemory: 3.2,      // seconds a guard keeps hunting after losing sight
-  catchRadius: 22,       // touch distance that costs a heart
+export const PLAYER = {
+  radius: 13,
+  walkSpeed: 155,
+  sneakSpeed: 88,
+  // A sneaking thief is harder to see: guards fill suspicion slower and
+  // their cones reach a little less far.
+  sneakSightFactor: 0.62,
+  sneakFillFactor: 0.55,
+};
 
-  // Cameras.
-  cameraRange: 185,
-  cameraHalfAngle: 0.36, // ~21 degrees
-  cameraSweepSpeed: 0.55, // radians per second of sweep
-  cameraLockPerSec: 34,  // alarm gained per second while a camera locks on
-  cameraHackSecs: 2.5,   // channel time at the security terminal
-  cameraOfflineSecs: 40, // how long cameras stay dark after a hack
-  cameraCooldownSecs: 20,
+export const GUARD = {
+  radius: 14,
+  patrolSpeed: 58,
+  chaseSpeed: 128,
+  returnSpeed: 78,
+  sightRange: 175,
+  sightHalfAngle: 0.61, // ~35 degrees each side of facing
+  suspectSeconds: 1.15, // continuous sight to go from calm to chase
+  loseSightSeconds: 3.0, // unseen before a chasing guard gives up
+  catchDistance: 26, // touching the thief ends the run (a heart)
+};
 
-  // Alarm.
-  alarmSeenPerSec: 16,   // alarm gained while any guard has eyes on the player
-  alarmDecayPerSec: 3.5, // alarm bled off while nobody sees the player
-  alarmCaughtJump: 25,   // alarm jump when a guard catches the player
-  alarmCrackFail: 10,    // alarm jump when a crack timing hit misses
+export const CAMERA = {
+  range: 205,
+  halfAngle: 0.32, // a narrow beam, ~18 degrees each side
+  sweepHalfAngle: 0.85, // how far the beam swings from its rest angle
+  sweepSeconds: 3.4, // one full sweep out and back
+  lockSeconds: 1.2, // continuous beam on the thief before it calls a guard
+};
 
-  // Vault crack minigame.
-  crackHitsNeeded: 3,
-  crackNeedleBase: 2.4,  // radians per second, grows after each hit
-  crackNeedleStep: 0.7,
-  crackGreenHalf: 0.34,  // half-width of the green zone on the timing bar
+export const ALARM = {
+  max: 100,
+  guardChasePerSecond: 8,
+  cameraLockPerSecond: 15,
+  catchPenalty: 25,
+  toolSmokeCost: 5,
+  toolEmpCost: 8,
+  dialMissCost: 10,
+  decayPerSecond: 2.2, // bleeds off while nobody sees the thief
+  ghostCeiling: 25, // stay under this all run for the ghost bonus
+};
 
-  // Score.
-  scoreSapphire: 1000,
-  scorePainting: 500,
-  scoreGold: 300,
-  scoreCash: 200,
-  scoreDocs: 400,
-  scoreTimePerSec: 10,   // bonus per second left on the clock at escape
-  scoreGhost: 500,       // bonus for escaping without ever being spotted
+export const TIMER_SECONDS = 360; // 6:00 until dawn
 
-  // Interaction.
-  interactRadius: 46,
-  pickupRadius: 30,
+export const LIVES = 3;
+
+export const TOOLS = {
+  smokeCharges: 2,
+  smokeSeconds: 5,
+  smokeRadius: 92,
+  empCharges: 1,
+  empSeconds: 20,
+};
+
+// The vault dial: a pointer spins and the thief locks three tumblers by
+// stopping it inside each target arc. Each tumbler spins faster than the
+// last, so the crack gets harder as the vault gives way.
+export const DIAL = {
+  tumblers: 3,
+  targetArc: 0.9, // radians of green arc per tumbler (~52 degrees)
+  speeds: [2.4, 3.3, 4.2], // radians per second, one per tumbler
+};
+
+export const LOOT = {
+  cashValue: 100,
+  goldValue: 250,
+  bondValue: 150,
+  diamondValue: 1000,
+  ghostBonus: 500,
+  timeBonusPerSecond: 2,
+};
+
+// Night-bank palette: deep blues, marble grey, gold. Safe cover is dark
+// blue, danger is amber and red, loot is gold — readable at a glance.
+export const PALETTE = {
+  rooftopFloor: '#1c2433',
+  officeFloor: '#232c3d',
+  tradingFloor: '#1f2a3a',
+  vaultFloor: '#26221f',
+  wall: '#0d1119',
+  wallTrim: '#c9a227',
+  doorOpen: '#3d4a63',
+  doorLocked: '#7a1f1f',
+  coverDesk: '#4a3826',
+  coverTerminal: '#14324a',
+  coverPlant: '#1d3a24',
+  coverSafe: '#3a3a42',
+  guard: '#2e4a7a',
+  guardCone: 'rgba(242, 193, 78, 0.20)',
+  guardConeChase: 'rgba(224, 62, 52, 0.28)',
+  cameraBeam: 'rgba(224, 62, 52, 0.16)',
+  player: '#14161c',
+  playerTrim: '#f2c14e',
+  playerGlow: 'rgba(242, 193, 78, 0.35)',
+  lootGold: '#f2c14e',
+  lootCash: '#7fd08a',
+  lootBond: '#8fb8e8',
+  keycard: '#4fd2ff',
+  vault: '#8a6d2f',
+  vaultOpen: '#f2c14e',
+  helipad: '#2e6b4f',
+  smoke: 'rgba(160, 170, 185, 0.45)',
 };

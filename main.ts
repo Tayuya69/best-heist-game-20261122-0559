@@ -1,4 +1,4 @@
-// SAPPHIRE HEIST — The Meridian Museum Job: the make.fun entrypoint (Node,
+// NIGHT VAULT — The Aurum Bank Job: the make.fun entrypoint (Node,
 // standard library only). The game is this directory's game/ folder: plain
 // static files a desktop browser loads offline (game/index.html and its ES
 // modules, no library, no network request). Running this file hands the game
@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
-export const ENTRY_TITLE = 'SAPPHIRE HEIST — The Meridian Museum Job';
+export const ENTRY_TITLE = 'NIGHT VAULT — The Aurum Bank Job';
 
 // The scorer's caps (reference/gate.json): only text_max_bytes shapes the
 // dossier bytes; the rest refuse an entry the scorer would refuse anyway —
